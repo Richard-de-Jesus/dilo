@@ -1266,14 +1266,14 @@ void updateWindowSize(void) {
     }
     E.screenrows -= 2; /* Get room for status bar. */
 }
-
+/*
 void handleSigWinCh(int unused __attribute__((unused))) {
     updateWindowSize();
     if (E.cy > E.screenrows) E.cy = E.screenrows - 1;
     if (E.cx > E.screencols) E.cx = E.screencols - 1;
     editorRefreshScreen();
-}
-
+}*/
+/*
 void initEditor(void) {
     E.cx = 0;
     E.cy = 0;
@@ -1286,7 +1286,7 @@ void initEditor(void) {
     E.syntax = NULL;
     updateWindowSize();
     signal(SIGWINCH, handleSigWinCh);
-}
+}*
 /*
 int main(int argc, char **argv) {
     if (argc != 2) {
