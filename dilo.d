@@ -354,29 +354,80 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
-/* Save the current file on disk. Return 0 on success, 1 on error. */
-int editorSave() {
-    int len;
-    char *buf = editorRowsToString(&len);
-    int fd = open(kilo.E.filename,O_RDWR|O_CREAT,octal!644);
-    if (fd == -1) goto writeerr;
+/* Delete the char at the current prompt position. */
+void editorDelChar()
+{
+    int filerow = kilo.E.rowoff + kilo.E.cy;
+    int filecol = kilo.E.coloff + kilo.E.cx;
+    erow* row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
 
+    if (!row || (filecol == 0 && filerow == 0))
+        return;
+    if (filecol == 0)
+    {
+        /* Handle the case of column 0, we need to move the current line
+         * on the right of the previous one. */
+        filecol = kilo.E.row[filerow - 1].size;
+        editorRowAppendString(&kilo.E.row[filerow - 1], row.chars, row.size);
+        editorDelRow(filerow);
+        row = null;
+        if (kilo.E.cy == 0)
+            kilo.E.rowoff--;
+        else
+            kilo.E.cy--;
+        kilo.E.cx = filecol;
+        if (kilo.E.cx >= kilo.E.screencols)
+        {
+            int shift = (kilo.E.screencols - kilo.E.cx) + 1;
+            kilo.E.cx -= shift;
+            kilo.E.coloff += shift;
+        }
+    }
+    else
+    {
+        editorRowDelChar(row, filecol - 1);
+        if (kilo.E.cx == 0 && kilo.E.coloff)
+            kilo.E.coloff--;
+        else
+            kilo.E.cx--;
+    }
+    if (row)
+        editorUpdateRow(row);
+    kilo.E.dirty++;
+}
+
+/* Save the current file on disk. Return 0 on success, 1 on error. */
+int editorSave()
+{
+    int len;
+    char* buf = editorRowsToString(&len);
+    int result = 1;
+    // replace the goto
+    scope (exit)
+    {
+        free(buf);
+        if (result == 1)
+            editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
+    }
+
+    int fd = open(kilo.E.filename, O_RDWR | O_CREAT, octal!644);
+    if (fd == -1)
+        return 1;
+
+    scope (exit)
+        close(fd);
     /* Use truncate + a single write(2) call in order to make saving
      * a bit safer, under the limits of what we can do in a small editor. */
-    if (ftruncate(fd,len) == -1) goto writeerr;
-    if (cbuiltin.write(fd,buf,len) != len) goto writeerr;
+    if (ftruncate(fd, len) == -1)
+        return 1;
+    if (cbuiltin.write(fd, buf, len) != len)
+        return 1;
+    // no errors
+    result = 0;
 
-    close(fd);
-    free(buf);
     kilo.E.dirty = 0;
     editorSetStatusMessage("%s bytes written on disk", len);
     return 0;
-
-writeerr:
-    free(buf);
-    if (fd != -1) close(fd);
-    editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
-    return 1;
 }
 
 /* ============================= Terminal update ============================ */
@@ -392,7 +443,7 @@ struct abuf
 
 void abAppend(abuf* ab, const char* s, int len)
 {
-    char* _new = cast(char*)realloc(ab.b, ab.len + len);
+    char* _new = cast(char*) realloc(ab.b, ab.len + len);
 
     if (_new == NULL)
         return;
