@@ -973,7 +973,3 @@ void editorMoveCursor(int key) {
         }
     }
 }
-
-int editorFileWasModified(void) {
-    return E.dirty;
-}

@@ -337,7 +337,7 @@ int editorOpen(char* filename)
  * setting it in the global state E.syntax. */
 void editorSelectSyntaxHighlight(const char* filename)
 {
-    foreach (size_t j; 0..HLDB_ENTRIES)
+    foreach (size_t j; 0 .. HLDB_ENTRIES)
     {
         editorSyntax* s = &HLDB[j];
         size_t i = 0;
@@ -356,6 +356,11 @@ void editorSelectSyntaxHighlight(const char* filename)
             i++;
         }
     }
+}
+
+int editorFileWasModified()
+{
+    return kilo.E.dirty;
 }
 
 void updateWindowSize()
