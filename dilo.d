@@ -354,6 +354,92 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* Delete the character at offset 'at' from the specified row. */
+void editorRowDelChar(erow* row, int at)
+{
+    if (row.size <= at)
+        return;
+    memmove(row.chars + at, row.chars + at + 1, row.size - at);
+    editorUpdateRow(row);
+    row.size--;
+    kilo.E.dirty++;
+}
+
+/* Insert the specified char at the current prompt position. */
+void editorInsertChar(int c)
+{
+    int filerow = kilo.E.rowoff + kilo.E.cy;
+    int filecol = kilo.E.coloff + kilo.E.cx;
+    erow* row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
+
+    /* If the row where the cursor is currently located does not exist in our
+     * logical representaion of the file, add enough empty rows as needed. */
+    if (!row)
+    {
+        while (kilo.E.numrows <= filerow)
+            editorInsertRow(kilo.E.numrows, "".dup.ptr, 0);
+    }
+    row = &kilo.E.row[filerow];
+    editorRowInsertChar(row, filecol, c);
+    if (kilo.E.cx == kilo.E.screencols - 1)
+        kilo.E.coloff++;
+    else
+        kilo.E.cx++;
+    kilo.E.dirty++;
+}
+
+/* Inserting a newline is slightly complex as we have to handle inserting a
+ * newline in the middle of a line, splitting the line as needed. */
+void editorInsertNewline()
+{
+    int filerow = kilo.E.rowoff + kilo.E.cy;
+    int filecol = kilo.E.coloff + kilo.E.cx;
+    erow* row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
+
+    // the "".dup.ptr is to convert string to char*
+    if (!row)
+    {
+        if (filerow == kilo.E.numrows)
+        {
+            editorInsertRow(filerow, "".dup.ptr, 0);
+        }
+        else
+        {
+            return;
+        }
+    }
+    else
+    {
+        /* If the cursor is over the current line size, we want to conceptually
+         * think it's just over the last character. */
+        if (filecol >= row.size)
+            filecol = row.size;
+        if (filecol == 0)
+        {
+            editorInsertRow(filerow, "".dup.ptr, 0);
+        }
+        else
+        {
+            /* We are in the middle of a line. Split it between two rows. */
+            editorInsertRow(filerow + 1, row.chars + filecol, row.size - filecol);
+            row = &kilo.E.row[filerow];
+            row.chars[filecol] = '\0';
+            row.size = filecol;
+            editorUpdateRow(row);
+        }
+    }
+    if (kilo.E.cy == kilo.E.screenrows - 1)
+    {
+        kilo.E.rowoff++;
+    }
+    else
+    {
+        kilo.E.cy++;
+    }
+    kilo.E.cx = 0;
+    kilo.E.coloff = 0;
+}
+
 /* Delete the char at the current prompt position. */
 void editorDelChar()
 {
