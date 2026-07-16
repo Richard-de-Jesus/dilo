@@ -357,6 +357,105 @@ void editorSelectSyntaxHighlight(const char* filename)
         }
     }
 }
+/* =============================== Find mode ================================ */
+ 
+enum KILO_QUERY_LEN = 256;
+void editorFind(int fd) {
+    char[KILO_QUERY_LEN+1] query = 0;
+    int qlen = 0;
+    int last_match = -1; /* Last line where a match was found. -1 for none. */
+    int find_next = 0; /* if 1 search next, if -1 search prev. */
+    int saved_hl_line = -1;  /* No saved HL */
+    char *saved_hl = null;
+
+
+void FIND_RESTORE_HL() { 
+    if (saved_hl) { 
+        memcpy(kilo.E.row[saved_hl_line].hl, saved_hl, kilo.E.row[saved_hl_line].rsize);
+        free(saved_hl); 
+        saved_hl = null; 
+    }
+}
+
+    /* Save the cursor position in order to restore it later. */
+    int saved_cx = kilo.E.cx, saved_cy = kilo.E.cy;
+    int saved_coloff = kilo.E.coloff, saved_rowoff = kilo.E.rowoff;
+
+    while(true) {
+        editorSetStatusMessage_D(
+            "Search: %s (Use ESC/Arrows/Enter)", query);
+        editorRefreshScreen();
+
+        int c = editorReadKey(fd);
+        if (c == DEL_KEY || c == CTRL_H || c == BACKSPACE) {
+            if (qlen != 0) query[--qlen] = '\0';
+            last_match = -1;
+        } else if (c == ESC || c == ENTER) {
+            if (c == ESC) {
+                kilo.E.cx = saved_cx; kilo.E.cy = saved_cy;
+                kilo.E.coloff = saved_coloff; kilo.E.rowoff = saved_rowoff;
+            }
+            FIND_RESTORE_HL();
+            editorSetStatusMessage_D("");
+            return;
+        } else if (c == ARROW_RIGHT || c == ARROW_DOWN) {
+            find_next = 1;
+        } else if (c == ARROW_LEFT || c == ARROW_UP) {
+            find_next = -1;
+        } else if (isprint(c)) {
+            if (qlen < KILO_QUERY_LEN) {
+                query[qlen++] = cast(char)c;
+                query[qlen] = '\0';
+                last_match = -1;
+            }
+        }
+
+        /* Search occurrence. */
+        if (last_match == -1) find_next = 1;
+        if (find_next) {
+            char *match = null;
+            long match_offset = 0;
+            int i;
+            int current = last_match;
+
+            for (i = 0; i < kilo.E.numrows; i++) {
+                current += find_next;
+                if (current == -1) current = kilo.E.numrows-1;
+                else if (current == kilo.E.numrows) current = 0;
+                match = strstr(kilo.E.row[current].render, query.ptr);
+                if (match) {
+                    match_offset = match - kilo.E.row[current].render;
+                    break;
+                }
+            }
+            find_next = 0;
+
+            /* Highlight */
+            FIND_RESTORE_HL();
+
+            if (match) {
+                erow *row = &kilo.E.row[current];
+                last_match = current;
+                if (row.hl) {
+                    saved_hl_line = current;
+                    saved_hl = cast(char*)malloc(row.rsize);
+                    memcpy(saved_hl, row.hl, row.rsize);
+                    memset(row.hl+ match_offset, HL_MATCH, qlen);
+                }
+                kilo.E.cy = 0;
+                kilo.E.cx = cast(int)match_offset;
+                kilo.E.rowoff = current;
+                kilo.E.coloff = 0;
+                /* Scroll horizontally as needed. */
+                if (kilo.E.cx > kilo.E.screencols) {
+                    int diff = kilo.E.cx - kilo.E.screencols;
+                    kilo.E.cx -= diff;
+                    kilo.E.coloff += diff;
+                }
+            }
+        }
+    }
+} 
 
 /* Try to get the number of columns in the current terminal. If the ioctl()
  * call fails the function will try to query the terminal itself.
@@ -373,14 +472,14 @@ int getWindowSize(int ifd, int ofd, int *rows, int *cols) {
         if (retval == -1) return 1;
 
         /* Go to right/bottom margin and get position. */
-        if (write(ofd,"\x1b[999C\x1b[999B",12) != 12) return -1;
+        if (kilo.write(ofd,"\x1b[999C\x1b[999B".ptr ,12) != 12) return -1;
         retval = getCursorPosition(ifd,ofd,rows,cols);
         if (retval == -1) return -1;
 
         /* Restore position. */
         char[32] seq = void;
-        snprintf(seq.ptr, 32, "\x1b[%d;%dH", orig_row, orig_col);
-        if (write(ofd, seq.ptr, strlen(seq.ptr)) == -1) {
+        cio.snprintf(seq.ptr, 32, "\x1b[%d;%dH", orig_row, orig_col);
+        if (kilo.write(ofd, seq.ptr, strlen(seq.ptr)) == -1) {
             /* Can't recover... */
         }
         return 0;
@@ -405,7 +504,7 @@ void updateWindowSize()
     }
     kilo.E.screenrows -= 2; /* Get room for status bar. */
 }
-
+// extern(C) because it is called by signal in <signal.h>
 extern (C)
 void handleSigWinCh(int unused)
 {
