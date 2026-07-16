@@ -358,6 +358,38 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* Try to get the number of columns in the current terminal. If the ioctl()
+ * call fails the function will try to query the terminal itself.
+ * Returns 0 on success, -1 on error. */
+int getWindowSize(int ifd, int ofd, int *rows, int *cols) {
+    winsize ws = void;
+
+    if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+        /* ioctl() failed. Try to query the terminal itself. */
+        int orig_row, orig_col, retval;
+
+        /* Get the initial position so we can restore it later. */
+        retval = getCursorPosition(ifd,ofd, &orig_row, &orig_col);
+        if (retval == -1) return 1;
+
+        /* Go to right/bottom margin and get position. */
+        if (write(ofd,"\x1b[999C\x1b[999B",12) != 12) return -1;
+        retval = getCursorPosition(ifd,ofd,rows,cols);
+        if (retval == -1) return -1;
+
+        /* Restore position. */
+        char[32] seq = void;
+        snprintf(seq.ptr, 32, "\x1b[%d;%dH", orig_row, orig_col);
+        if (write(ofd, seq.ptr, strlen(seq.ptr)) == -1) {
+            /* Can't recover... */
+        }
+        return 0;
+    }
+    *cols = ws.ws_col;
+    *rows = ws.ws_row;
+    return 0;
+}
+
 int editorFileWasModified()
 {
     return kilo.E.dirty;
