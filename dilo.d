@@ -1,6 +1,7 @@
 import kilo;
 
 import std.stdio : writeln;
+import std.format : sformat;
 import std;
 
 // resolve conflicts between libc and core.stdc.
@@ -12,10 +13,23 @@ alias cio = libc.stdio;
   and D's reimport of those symbols in core.* */
 alias cbuiltin = kilo;
 
-// dmd is not able to handle the errno macro
-// so just pulled up the original name in
-// glibc. probably not portable.
-alias diloErrno = __errno_location;
+/*Set an editor status message for the second line
+  of the status, at the end of the screen.
+  
+  for now it is only going to be used by main function
+  and the C version will be kept until other functions
+  are translated
+*/
+void editorSetStatusMessage_D(Ts...)(const char[] fmt, Ts values)
+{
+    //char[80] buf = E.statusmsg;
+    sformat(kilo.E.statusmsg, fmt, values);
+    kilo.E.statusmsg_time = time(null);
+}
+
+// dmd is not able to set errno since
+// it's a macro, made a wrapper function in C.
+import dilo_errno : setErrno;
 
 /* Raw mode: 1960 magic shit. */
 int enableRawMode(int fd)
@@ -27,8 +41,9 @@ int enableRawMode(int fd)
     bool err = true;
     // replaced 'goto fatal' with scope(exit)
     scope (exit)
-        if (err) *diloErrno() = ENOTTY;
-    
+        if (err)
+            setErrno(ENOTTY);
+
     if (!isatty(STDIN_FILENO))
         return -1;
 
@@ -54,7 +69,7 @@ int enableRawMode(int fd)
     /* put terminal in raw mode after flushing */
     if (tcsetattr(fd, TCSAFLUSH, &raw) < 0)
         return -1;
-        
+
     kilo.E.rawmode = 1;
     // no error, set to false so that scope(exit)
     // dont modify errno
@@ -170,8 +185,8 @@ int main(string[] args)
     editorOpen(filename.ptr);
     enableRawMode(STDIN_FILENO);
 
-    char[] msg = "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find".dup;
-    editorSetStatusMessage(msg.ptr);
+    string msg = "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find";
+    editorSetStatusMessage_D(msg);
 
     while (true)
     {
