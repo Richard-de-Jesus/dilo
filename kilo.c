@@ -770,41 +770,6 @@ void editorDelChar(void) {
     if (row) editorUpdateRow(row);
     E.dirty++;
 }
-
-/* Load the specified program in the editor memory and returns 0 on success
- * or 1 on error. */
-int editorOpen(char *filename) {
-    FILE *fp;
-
-    E.dirty = 0;
-    free(E.filename);
-    size_t fnlen = strlen(filename)+1;
-    E.filename = malloc(fnlen);
-    memcpy(E.filename,filename,fnlen);
-
-    fp = fopen(filename,"r");
-    if (!fp) {
-        if (errno != ENOENT) {
-            perror("Opening file");
-            exit(1);
-        }
-        return 1;
-    }
-
-    char *line = NULL;
-    size_t linecap = 0;
-    ssize_t linelen;
-    while((linelen = getline(&line,&linecap,fp)) != -1) {
-        if (linelen && (line[linelen-1] == '\n' || line[linelen-1] == '\r'))
-            line[--linelen] = '\0';
-        editorInsertRow(E.numrows,line,linelen);
-    }
-    free(line);
-    fclose(fp);
-    E.dirty = 0;
-    return 0;
-}
-
 /* Save the current file on disk. Return 0 on success, 1 on error. */
 int editorSave(void) {
     int len;
