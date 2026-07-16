@@ -13,6 +13,131 @@ alias cio = libc.stdio;
   and D's reimport of those symbols in core.* */
 alias cbuiltin = kilo;
 
+
+enum ABUF_INIT = abuf(null, 0);
+/* This function writes the whole screen using VT100 escape characters
+ * starting from the logical state of the editor in the global state 'E'. */
+
+ // extern(C) because it is used by kilo.c still.
+extern(C) void editorRefreshScreen() {
+    int y;
+    erow *r;
+    char[32] buf = void;
+    // TODO: replace abuf with a D array.
+    abuf ab = ABUF_INIT;
+
+    abAppend(&ab,"\x1b[?25l",6); /* Hide cursor. */
+    abAppend(&ab,"\x1b[H",3); /* Go home. */
+    for (y = 0; y < kilo.E.screenrows; y++) {
+        int filerow = kilo.E.rowoff+y;
+
+        if (filerow >= kilo.E.numrows) {
+            if (kilo.E.numrows == 0 && y == kilo.E.screenrows/3) {
+                char[80] welcome = void;
+                int welcomelen = cio.snprintf(welcome.ptr, welcome.length,
+                    "Kilo editor -- verison %s\x1b[0K\r\n", KILO_VERSION.ptr);
+                int padding = (kilo.E.screencols-welcomelen)/2;
+                if (padding) {
+                    abAppend(&ab,"~",1);
+                    padding--;
+                }
+                while(padding--) abAppend(&ab," ",1);
+                abAppend(&ab,welcome.ptr,welcomelen);
+            } else {
+                abAppend(&ab,"~\x1b[0K\r\n",7);
+            }
+            continue;
+        }
+
+        r = &kilo.E.row[filerow];
+
+        int len = r.rsize - kilo.E.coloff;
+        int current_color = -1;
+        if (len > 0) {
+            if (len > kilo.E.screencols) len = kilo.E.screencols;
+            char *c = r.render+kilo.E.coloff;
+            ubyte *hl = r.hl+kilo.E.coloff;
+            int j;
+            for (j = 0; j < len; j++) {
+                if (hl[j] == HL_NONPRINT) {
+                    char sym;
+                    abAppend(&ab,"\x1b[7m",4);
+                    if (c[j] <= 26)
+                        sym = cast(char) ('@' + c[j]);
+                    else
+                        sym = '?';
+                    abAppend(&ab,&sym,1);
+                    abAppend(&ab,"\x1b[0m",4);
+                } else if (hl[j] == HL_NORMAL) {
+                    if (current_color != -1) {
+                        abAppend(&ab,"\x1b[39m",5);
+                        current_color = -1;
+                    }
+                    abAppend(&ab,c+j,1);
+                } else {
+                    int color = editorSyntaxToColor(hl[j]);
+                    if (color != current_color) {
+                        char [16]_buf = void;
+                        int clen = cio.snprintf(_buf.ptr, _buf.length,"\x1b[%dm",color);
+                        current_color = color;
+                        abAppend(&ab,_buf.ptr,clen);
+                    }
+                    abAppend(&ab,c+j,1);
+                }
+            }
+        }
+        abAppend(&ab,"\x1b[39m",5);
+        abAppend(&ab,"\x1b[0K",4);
+        abAppend(&ab,"\r\n",2);
+    }
+
+    /* Create a two rows status. First row: */
+    abAppend(&ab,"\x1b[0K",4);
+    abAppend(&ab,"\x1b[7m",4);
+    char[80] status = void;
+    char[80] rstatus = void;
+    int len = cio.snprintf(status.ptr, status.length, "%.20s - %d lines %s",
+        kilo.E.filename, kilo.E.numrows, kilo.E.dirty ? "(modified)".ptr : "".ptr);
+    int rlen = cio.snprintf(rstatus.ptr, rstatus.length,
+        "%d/%d",kilo.E.rowoff+ kilo.E.cy+ 1,kilo.E.numrows);
+    if (len > kilo.E.screencols) len = kilo.E.screencols;
+    abAppend(&ab,status.ptr,len);
+    while(len < kilo.E.screencols) {
+        if ( kilo.E.screencols - len == rlen) {
+            abAppend(&ab,rstatus.ptr,rlen);
+            break;
+        } else {
+            abAppend(&ab," ",1);
+            len++;
+        }
+    }
+    abAppend(&ab,"\x1b[0m\r\n",6);
+
+    /* Second row depends on E.statusmsg and the status message update time. */
+    abAppend(&ab,"\x1b[0K",4);
+    size_t msglen = strlen(kilo.E.statusmsg.ptr);
+    if (msglen && time(null) - kilo.E.statusmsg_time < 5)
+        abAppend(&ab,kilo.E.statusmsg.ptr , msglen <= kilo.E.screencols ? cast(int)msglen : kilo.E.screencols);
+
+    /* Put cursor at its current position. Note that the horizontal position
+     * at which the cursor is displayed may be different compared to 'E.cx'
+     * because of TABs. */
+    int j;
+    int cx = 1;
+    int filerow = kilo.E.rowoff+ kilo.E.cy;
+    erow *row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
+    if (row) {
+        for (j = kilo.E.coloff; j < (kilo.E.cx+ kilo.E.coloff); j++) {
+            if (j < row.size && row.chars[j] == TAB) cx += 7-((cx)%8);
+            cx++;
+        }
+    }
+    cio.snprintf(buf.ptr, buf.length,"\x1b[%d;%dH",kilo.E.cy+1,cx);
+    abAppend(&ab,buf.ptr , cast(int)strlen(buf.ptr));
+    abAppend(&ab,"\x1b[?25h",6); /* Show cursor. */
+    cbuiltin.write(STDOUT_FILENO,ab.b,ab.len);
+    abFree(&ab);
+}
 /*Set an editor status message for the second line
   of the status, at the end of the screen.
   
