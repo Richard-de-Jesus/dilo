@@ -977,12 +977,3 @@ void editorMoveCursor(int key) {
 int editorFileWasModified(void) {
     return E.dirty;
 }
-
-void updateWindowSize(void) {
-    if (getWindowSize(STDIN_FILENO,STDOUT_FILENO,
-                      &E.screenrows,&E.screencols) == -1) {
-        perror("Unable to query the screen for size (columns / rows)");
-        exit(1);
-    }
-    E.screenrows -= 2; /* Get room for status bar. */
-}

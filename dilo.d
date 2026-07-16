@@ -250,8 +250,9 @@ void editorSetStatusMessage_D(Ts...)(const char[] fmt, Ts values)
 // it's a macro, made a wrapper function in C.
 import dilo_errno : setErrno;
 
-int enableRawMode(int fd) {
-/* Raw mode: 1960 magic shit. */
+int enableRawMode(int fd)
+{
+    /* Raw mode: 1960 magic shit. */
     termios raw;
     if (kilo.E.rawmode)
         return 0;
@@ -263,13 +264,13 @@ int enableRawMode(int fd) {
 
     if (!isatty(STDIN_FILENO))
         return -1;
-    
+
     atexit(&editorAtExit);
     if (tcgetattr(fd, &orig_termios) == -1)
-         return -1;
-    raw = orig_termios;  /* modify the original mode */
+        return -1;
+    raw = orig_termios; /* modify the original mode */
     /* input modes: no break, no CR to NL, no parity check, no strip char,
-     * no start/stop output control. */ 
+     * no start/stop output control. */
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     /* output modes - disable post processing */
     raw.c_oflag &= ~(OPOST);
@@ -336,7 +337,7 @@ int editorOpen(char* filename)
  * setting it in the global state E.syntax. */
 void editorSelectSyntaxHighlight(const char* filename)
 {
-    for (size_t j = 0; j < HLDB_ENTRIES; j++)
+    foreach (size_t j; 0..HLDB_ENTRIES)
     {
         editorSyntax* s = &HLDB[j];
         size_t i = 0;
@@ -355,6 +356,17 @@ void editorSelectSyntaxHighlight(const char* filename)
             i++;
         }
     }
+}
+
+void updateWindowSize()
+{
+    if (getWindowSize(STDIN_FILENO, STDOUT_FILENO,
+            &kilo.E.screenrows, &kilo.E.screencols) == -1)
+    {
+        cio.perror("Unable to query the screen for size (columns / rows)");
+        exit(1);
+    }
+    kilo.E.screenrows -= 2; /* Get room for status bar. */
 }
 
 extern (C)
@@ -395,10 +407,11 @@ int main(string[] args)
     // append null terminator to 2nd arg
     // make it compatible with C code.
     char[] filename = cast(char[])(args[1] ~ '\0');
-    
+
     initEditor();
     editorSelectSyntaxHighlight(filename.ptr);
-    if(editorOpen(filename.ptr) == 1) {
+    if (editorOpen(filename.ptr) == 1)
+    {
         writeln(std.stdio.stderr, "file dont exist");
         exit(1);
     }
