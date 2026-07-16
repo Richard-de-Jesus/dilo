@@ -3,9 +3,54 @@ import kilo;
 import std.stdio : writeln;
 import std;
 
+// resolve conflicts between libc and core.stdc.
+// we prefer D's version, more type safety.
+alias libc = core.stdc;
+alias cio = libc.stdio; 
+
+/* making clear that kilo namespace is used
+ to resolve conflicts between symbols built in C
+  and D's reimport of those symbols in core.* */
+alias cbuiltin = kilo;
+
+/* Load the specified program in the editor memory and returns 0 on success
+ * or 1 on error. */
+int editorOpen(char *filename) {
+    cio.FILE *fp;
+
+    kilo.E.dirty = 0;
+    free(kilo.E.filename);
+    size_t fnlen = strlen(filename)+1;
+    kilo.E.filename = cast(char*) malloc(fnlen);
+    memcpy(kilo.E.filename,filename,fnlen);
+
+    fp = cio.fopen(filename,"r");
+    if (!fp) {
+        if (errno != ENOENT) {
+            cio.perror("Opening file");
+            exit(1);
+        }
+        return 1;
+    }
+
+    char *line = null;
+    size_t linecap = 0;
+    cbuiltin.ssize_t linelen;
+    // cast away the shared in fp.
+    while((linelen = getline(&line,&linecap, cast(cbuiltin._IO_FILE*) fp)) != -1) {
+        if (linelen && (line[linelen-1] == '\n' || line[linelen-1] == '\r'))
+            line[--linelen] = '\0';
+        editorInsertRow(kilo.E.numrows,line,linelen);
+    }
+    free(line);
+    fclose(fp);
+    kilo.E.dirty = 0;
+    return 0;
+}
+
 /* Select the syntax highlight scheme depending on the filename,
  * setting it in the global state E.syntax. */
-void editorSelectSyntaxHighlight(char* filename)
+void editorSelectSyntaxHighlight(const char* filename)
 {
     for (size_t j = 0; j < HLDB_ENTRIES; j++)
     {
