@@ -357,6 +357,83 @@ void editorSelectSyntaxHighlight(const char* filename)
         }
     }
 }
+
+/* ========================= Editor events handling  ======================== */
+
+/* Handle cursor position change because arrow keys were pressed. */
+void editorMoveCursor(int key) {
+    int filerow = kilo.E.rowoff+ kilo.E.cy;
+    int filecol = kilo.E.coloff+ kilo.E.cx;
+    int rowlen;
+    erow *row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
+
+    final switch(key) {
+    case ARROW_LEFT:
+        if (kilo.E.cx == 0) {
+            if (kilo.E.coloff) {
+                kilo.E.coloff--;
+            } else {
+                if (filerow > 0) {
+                    kilo.E.cy--;
+                    kilo.E.cx = kilo.E.row[filerow- 1].size;
+                    if (kilo.E.cx > kilo.E.screencols- 1) {
+                        kilo.E.coloff = kilo.E.cx-kilo.E.screencols+ 1;
+                        kilo.E.cx = kilo.E.screencols- 1;
+                    }
+                }
+            }
+        } else {
+            kilo.E.cx -= 1;
+        }
+        break;
+    case ARROW_RIGHT:
+        if (row && filecol < row.size) {
+            if (kilo.E.cx == kilo.E.screencols -1) {
+                kilo.E.coloff++;
+            } else {
+                kilo.E.cx += 1;
+            }
+        } else if (row && filecol == row.size) {
+            kilo.E.cx = 0;
+            kilo.E.coloff = 0;
+            if (kilo.E.cy == kilo.E.screenrows -1) {
+                kilo.E.rowoff++;
+            } else {
+                kilo.E.cy += 1;
+            }
+        }
+        break;
+    case ARROW_UP:
+        if (kilo.E.cy == 0) {
+            if (kilo.E.rowoff) kilo.E.rowoff--;
+        } else {
+            kilo.E.cy -= 1;
+        }
+        break;
+    case ARROW_DOWN:
+        if (filerow < kilo.E.numrows) {
+            if (kilo.E.cy == kilo.E.screenrows -1) {
+                kilo.E.rowoff++;
+            } else {
+                kilo.E.cy += 1;
+            }
+        }
+        break;
+    }
+    /* Fix cx if the current line has not enough chars. */
+    filerow = kilo.E.rowoff+ kilo.E.cy;
+    filecol = kilo.E.coloff+ kilo.E.cx;
+    row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
+    rowlen = row ? row.size : 0;
+    if (filecol > rowlen) {
+        kilo.E.cx -= filecol- rowlen;
+        if (kilo.E.cx < 0) {
+            kilo.E.coloff += kilo.E.cx;
+            kilo.E.cx = 0;
+        }
+    }
+}
+
 /* =============================== Find mode ================================ */
  
 enum KILO_QUERY_LEN = 256;
