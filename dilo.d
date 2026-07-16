@@ -358,76 +358,132 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* ============================= Terminal update ============================ */
+
+/* heap allocated string. This is useful in order to
+ * write all the escape sequences in a buffer and flush them to the standard
+ * output in a single call, to avoid flickering effects. */
+struct abuf
+{
+    char* b;
+    int len;
+};
+
+void abAppend(abuf* ab, const char* s, int len)
+{
+    char* _new = cast(char*)realloc(ab.b, ab.len + len);
+
+    if (_new == NULL)
+        return;
+    memcpy(_new + ab.len, s, len);
+    ab.b = _new;
+    ab.len += len;
+}
+
+void abFree(abuf* ab)
+{
+    free(ab.b);
+}
+
 /* ========================= Editor events handling  ======================== */
 
 /* Handle cursor position change because arrow keys were pressed. */
-void editorMoveCursor(int key) {
-    int filerow = kilo.E.rowoff+ kilo.E.cy;
-    int filecol = kilo.E.coloff+ kilo.E.cx;
+void editorMoveCursor(int key)
+{
+    int filerow = kilo.E.rowoff + kilo.E.cy;
+    int filecol = kilo.E.coloff + kilo.E.cx;
     int rowlen;
-    erow *row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
+    erow* row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
 
-    final switch(key) {
+    final switch (key)
+    {
     case ARROW_LEFT:
-        if (kilo.E.cx == 0) {
-            if (kilo.E.coloff) {
+        if (kilo.E.cx == 0)
+        {
+            if (kilo.E.coloff)
+            {
                 kilo.E.coloff--;
-            } else {
-                if (filerow > 0) {
+            }
+            else
+            {
+                if (filerow > 0)
+                {
                     kilo.E.cy--;
-                    kilo.E.cx = kilo.E.row[filerow- 1].size;
-                    if (kilo.E.cx > kilo.E.screencols- 1) {
-                        kilo.E.coloff = kilo.E.cx-kilo.E.screencols+ 1;
-                        kilo.E.cx = kilo.E.screencols- 1;
+                    kilo.E.cx = kilo.E.row[filerow - 1].size;
+                    if (kilo.E.cx > kilo.E.screencols - 1)
+                    {
+                        kilo.E.coloff = kilo.E.cx - kilo.E.screencols + 1;
+                        kilo.E.cx = kilo.E.screencols - 1;
                     }
                 }
             }
-        } else {
+        }
+        else
+        {
             kilo.E.cx -= 1;
         }
         break;
     case ARROW_RIGHT:
-        if (row && filecol < row.size) {
-            if (kilo.E.cx == kilo.E.screencols -1) {
+        if (row && filecol < row.size)
+        {
+            if (kilo.E.cx == kilo.E.screencols - 1)
+            {
                 kilo.E.coloff++;
-            } else {
+            }
+            else
+            {
                 kilo.E.cx += 1;
             }
-        } else if (row && filecol == row.size) {
+        }
+        else if (row && filecol == row.size)
+        {
             kilo.E.cx = 0;
             kilo.E.coloff = 0;
-            if (kilo.E.cy == kilo.E.screenrows -1) {
+            if (kilo.E.cy == kilo.E.screenrows - 1)
+            {
                 kilo.E.rowoff++;
-            } else {
+            }
+            else
+            {
                 kilo.E.cy += 1;
             }
         }
         break;
     case ARROW_UP:
-        if (kilo.E.cy == 0) {
-            if (kilo.E.rowoff) kilo.E.rowoff--;
-        } else {
+        if (kilo.E.cy == 0)
+        {
+            if (kilo.E.rowoff)
+                kilo.E.rowoff--;
+        }
+        else
+        {
             kilo.E.cy -= 1;
         }
         break;
     case ARROW_DOWN:
-        if (filerow < kilo.E.numrows) {
-            if (kilo.E.cy == kilo.E.screenrows -1) {
+        if (filerow < kilo.E.numrows)
+        {
+            if (kilo.E.cy == kilo.E.screenrows - 1)
+            {
                 kilo.E.rowoff++;
-            } else {
+            }
+            else
+            {
                 kilo.E.cy += 1;
             }
         }
         break;
     }
     /* Fix cx if the current line has not enough chars. */
-    filerow = kilo.E.rowoff+ kilo.E.cy;
-    filecol = kilo.E.coloff+ kilo.E.cx;
+    filerow = kilo.E.rowoff + kilo.E.cy;
+    filecol = kilo.E.coloff + kilo.E.cx;
     row = (filerow >= kilo.E.numrows) ? null : &kilo.E.row[filerow];
     rowlen = row ? row.size : 0;
-    if (filecol > rowlen) {
-        kilo.E.cx -= filecol- rowlen;
-        if (kilo.E.cx < 0) {
+    if (filecol > rowlen)
+    {
+        kilo.E.cx -= filecol - rowlen;
+        if (kilo.E.cx < 0)
+        {
             kilo.E.coloff += kilo.E.cx;
             kilo.E.cx = 0;
         }
@@ -435,72 +491,95 @@ void editorMoveCursor(int key) {
 }
 
 /* =============================== Find mode ================================ */
- 
+
 enum KILO_QUERY_LEN = 256;
-void editorFind(int fd) {
-    char[KILO_QUERY_LEN+1] query = 0;
+void editorFind(int fd)
+{
+    char[KILO_QUERY_LEN + 1] query = 0;
     int qlen = 0;
     int last_match = -1; /* Last line where a match was found. -1 for none. */
     int find_next = 0; /* if 1 search next, if -1 search prev. */
-    int saved_hl_line = -1;  /* No saved HL */
-    char *saved_hl = null;
+    int saved_hl_line = -1; /* No saved HL */
+    char* saved_hl = null;
 
-
-void FIND_RESTORE_HL() { 
-    if (saved_hl) { 
-        memcpy(kilo.E.row[saved_hl_line].hl, saved_hl, kilo.E.row[saved_hl_line].rsize);
-        free(saved_hl); 
-        saved_hl = null; 
+    void FIND_RESTORE_HL()
+    {
+        if (saved_hl)
+        {
+            memcpy(kilo.E.row[saved_hl_line].hl, saved_hl, kilo.E.row[saved_hl_line].rsize);
+            free(saved_hl);
+            saved_hl = null;
+        }
     }
-}
 
     /* Save the cursor position in order to restore it later. */
     int saved_cx = kilo.E.cx, saved_cy = kilo.E.cy;
     int saved_coloff = kilo.E.coloff, saved_rowoff = kilo.E.rowoff;
 
-    while(true) {
+    while (true)
+    {
         editorSetStatusMessage_D(
             "Search: %s (Use ESC/Arrows/Enter)", query);
         editorRefreshScreen();
 
         int c = editorReadKey(fd);
-        if (c == DEL_KEY || c == CTRL_H || c == BACKSPACE) {
-            if (qlen != 0) query[--qlen] = '\0';
+        if (c == DEL_KEY || c == CTRL_H || c == BACKSPACE)
+        {
+            if (qlen != 0)
+                query[--qlen] = '\0';
             last_match = -1;
-        } else if (c == ESC || c == ENTER) {
-            if (c == ESC) {
-                kilo.E.cx = saved_cx; kilo.E.cy = saved_cy;
-                kilo.E.coloff = saved_coloff; kilo.E.rowoff = saved_rowoff;
+        }
+        else if (c == ESC || c == ENTER)
+        {
+            if (c == ESC)
+            {
+                kilo.E.cx = saved_cx;
+                kilo.E.cy = saved_cy;
+                kilo.E.coloff = saved_coloff;
+                kilo.E.rowoff = saved_rowoff;
             }
             FIND_RESTORE_HL();
             editorSetStatusMessage_D("");
             return;
-        } else if (c == ARROW_RIGHT || c == ARROW_DOWN) {
+        }
+        else if (c == ARROW_RIGHT || c == ARROW_DOWN)
+        {
             find_next = 1;
-        } else if (c == ARROW_LEFT || c == ARROW_UP) {
+        }
+        else if (c == ARROW_LEFT || c == ARROW_UP)
+        {
             find_next = -1;
-        } else if (isprint(c)) {
-            if (qlen < KILO_QUERY_LEN) {
-                query[qlen++] = cast(char)c;
+        }
+        else if (isprint(c))
+        {
+            if (qlen < KILO_QUERY_LEN)
+            {
+                query[qlen++] = cast(char) c;
                 query[qlen] = '\0';
                 last_match = -1;
             }
         }
 
         /* Search occurrence. */
-        if (last_match == -1) find_next = 1;
-        if (find_next) {
-            char *match = null;
+        if (last_match == -1)
+            find_next = 1;
+        if (find_next)
+        {
+            char* match = null;
             long match_offset = 0;
             int i;
             int current = last_match;
 
-            for (i = 0; i < kilo.E.numrows; i++) {
+            for (i = 0; i < kilo.E.numrows; i++)
+            {
                 current += find_next;
-                if (current == -1) current = kilo.E.numrows-1;
-                else if (current == kilo.E.numrows) current = 0;
+                if (current == -1)
+                    current = kilo.E.numrows - 1;
+                else if (current == kilo.E.numrows)
+                    current = 0;
                 match = strstr(kilo.E.row[current].render, query.ptr);
-                if (match) {
+                if (match)
+                {
                     match_offset = match - kilo.E.row[current].render;
                     break;
                 }
@@ -510,21 +589,24 @@ void FIND_RESTORE_HL() {
             /* Highlight */
             FIND_RESTORE_HL();
 
-            if (match) {
-                erow *row = &kilo.E.row[current];
+            if (match)
+            {
+                erow* row = &kilo.E.row[current];
                 last_match = current;
-                if (row.hl) {
+                if (row.hl)
+                {
                     saved_hl_line = current;
-                    saved_hl = cast(char*)malloc(row.rsize);
+                    saved_hl = cast(char*) malloc(row.rsize);
                     memcpy(saved_hl, row.hl, row.rsize);
-                    memset(row.hl+ match_offset, HL_MATCH, qlen);
+                    memset(row.hl + match_offset, HL_MATCH, qlen);
                 }
                 kilo.E.cy = 0;
-                kilo.E.cx = cast(int)match_offset;
+                kilo.E.cx = cast(int) match_offset;
                 kilo.E.rowoff = current;
                 kilo.E.coloff = 0;
                 /* Scroll horizontally as needed. */
-                if (kilo.E.cx > kilo.E.screencols) {
+                if (kilo.E.cx > kilo.E.screencols)
+                {
                     int diff = kilo.E.cx - kilo.E.screencols;
                     kilo.E.cx -= diff;
                     kilo.E.coloff += diff;
@@ -532,31 +614,37 @@ void FIND_RESTORE_HL() {
             }
         }
     }
-} 
+}
 
 /* Try to get the number of columns in the current terminal. If the ioctl()
  * call fails the function will try to query the terminal itself.
  * Returns 0 on success, -1 on error. */
-int getWindowSize(int ifd, int ofd, int *rows, int *cols) {
+int getWindowSize(int ifd, int ofd, int* rows, int* cols)
+{
     winsize ws = void;
 
-    if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0)
+    {
         /* ioctl() failed. Try to query the terminal itself. */
         int orig_row, orig_col, retval;
 
         /* Get the initial position so we can restore it later. */
-        retval = getCursorPosition(ifd,ofd, &orig_row, &orig_col);
-        if (retval == -1) return 1;
+        retval = getCursorPosition(ifd, ofd, &orig_row, &orig_col);
+        if (retval == -1)
+            return 1;
 
         /* Go to right/bottom margin and get position. */
-        if (kilo.write(ofd,"\x1b[999C\x1b[999B".ptr ,12) != 12) return -1;
-        retval = getCursorPosition(ifd,ofd,rows,cols);
-        if (retval == -1) return -1;
+        if (kilo.write(ofd, "\x1b[999C\x1b[999B".ptr, 12) != 12)
+            return -1;
+        retval = getCursorPosition(ifd, ofd, rows, cols);
+        if (retval == -1)
+            return -1;
 
         /* Restore position. */
         char[32] seq = void;
         cio.snprintf(seq.ptr, 32, "\x1b[%d;%dH", orig_row, orig_col);
-        if (kilo.write(ofd, seq.ptr, strlen(seq.ptr)) == -1) {
+        if (kilo.write(ofd, seq.ptr, strlen(seq.ptr)) == -1)
+        {
             /* Can't recover... */
         }
         return 0;
