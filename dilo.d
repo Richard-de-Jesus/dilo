@@ -37,7 +37,7 @@ void editorProcessKeypress(int fd)
         /* Quit if the file was already saved. */
         if (kilo.E.dirty && quit_times)
         {
-            editorSetStatusMessage_D("WARNING!!! File has unsaved changes."
+            editorSetStatusMessage("WARNING!!! File has unsaved changes."
                     ~ "Press Ctrl-Q %s more times to quit.", quit_times);
             quit_times--;
             return;
@@ -234,12 +234,8 @@ extern (C) void editorRefreshScreen()
 }
 /*Set an editor status message for the second line
   of the status, at the end of the screen.
-  
-  for now it is only going to be used by main function
-  and the C version will be kept until other functions
-  are translated
 */
-void editorSetStatusMessage_D(Ts...)(const char[] fmt, Ts values)
+void editorSetStatusMessage(Ts...)(const char[] fmt, Ts values)
 {
     //char[80] buf = E.statusmsg;
     sformat(kilo.E.statusmsg, fmt, values);
@@ -356,6 +352,31 @@ void editorSelectSyntaxHighlight(const char* filename)
             i++;
         }
     }
+}
+
+/* Save the current file on disk. Return 0 on success, 1 on error. */
+int editorSave() {
+    int len;
+    char *buf = editorRowsToString(&len);
+    int fd = open(kilo.E.filename,O_RDWR|O_CREAT,octal!644);
+    if (fd == -1) goto writeerr;
+
+    /* Use truncate + a single write(2) call in order to make saving
+     * a bit safer, under the limits of what we can do in a small editor. */
+    if (ftruncate(fd,len) == -1) goto writeerr;
+    if (cbuiltin.write(fd,buf,len) != len) goto writeerr;
+
+    close(fd);
+    free(buf);
+    kilo.E.dirty = 0;
+    editorSetStatusMessage("%s bytes written on disk", len);
+    return 0;
+
+writeerr:
+    free(buf);
+    if (fd != -1) close(fd);
+    editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
+    return 1;
 }
 
 /* ============================= Terminal update ============================ */
@@ -518,7 +539,7 @@ void editorFind(int fd)
 
     while (true)
     {
-        editorSetStatusMessage_D(
+        editorSetStatusMessage(
             "Search: %s (Use ESC/Arrows/Enter)", query);
         editorRefreshScreen();
 
@@ -539,7 +560,7 @@ void editorFind(int fd)
                 kilo.E.rowoff = saved_rowoff;
             }
             FIND_RESTORE_HL();
-            editorSetStatusMessage_D("");
+            editorSetStatusMessage("");
             return;
         }
         else if (c == ARROW_RIGHT || c == ARROW_DOWN)
@@ -718,7 +739,7 @@ int main(string[] args)
     }
     enableRawMode(STDIN_FILENO);
     string msg = "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find";
-    editorSetStatusMessage_D(msg);
+    editorSetStatusMessage(msg);
 
     while (true)
     {
