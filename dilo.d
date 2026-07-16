@@ -1,17 +1,47 @@
 import kilo;
 
-import std.stdio: writeln;
+import std.stdio : writeln;
 import std;
 
-extern(C)
-void handleSigWinCh(int unused) {
+/* Select the syntax highlight scheme depending on the filename,
+ * setting it in the global state E.syntax. */
+void editorSelectSyntaxHighlight(char* filename)
+{
+    for (size_t j = 0; j < HLDB_ENTRIES; j++)
+    {
+        editorSyntax* s = &HLDB[j];
+        size_t i = 0;
+        while (s.filematch[i])
+        {
+            char* p;
+            size_t patlen = strlen(s.filematch[i]);
+            if ((p = strstr(filename, s.filematch[i])) != NULL)
+            {
+                if (s.filematch[i][0] != '.' || p[patlen] == '\0')
+                {
+                    kilo.E.syntax = s;
+                    return;
+                }
+            }
+            i++;
+        }
+    }
+}
+
+extern (C)
+void handleSigWinCh(int unused)
+{
 
     updateWindowSize();
-    if (kilo.E.cy > kilo.E.screenrows) kilo.E.cy = kilo.E.screenrows - 1;
-    if (kilo.E.cx > kilo.E.screencols) kilo.E.cx = kilo.E.screencols - 1;
+    if (kilo.E.cy > kilo.E.screenrows)
+        kilo.E.cy = kilo.E.screenrows - 1;
+    if (kilo.E.cx > kilo.E.screencols)
+        kilo.E.cx = kilo.E.screencols - 1;
     editorRefreshScreen();
 }
-void initEditor() {
+
+void initEditor()
+{
     kilo.E.cx = 0;
     kilo.E.cy = 0;
     kilo.E.rowoff = 0;
@@ -23,19 +53,22 @@ void initEditor() {
     kilo.E.syntax = null;
     updateWindowSize();
     // dmd complains about the function being type void.
-     extern(C) void function(int) han = &handleSigWinCh;
+    extern (C) void function(int) han = &handleSigWinCh;
     // added 0 arg, dmd is more strict.
-    signal(SIGWINCH, han); 
+    signal(SIGWINCH, han);
 }
-int main(string[] args) {
-    if(args.length != 2) {
+
+int main(string[] args)
+{
+    if (args.length != 2)
+    {
         writeln(std.stdio.stderr, "Usage: dilo <filename>");
         // exit is imported from kilo, wich imports stdlib.h
         exit(1);
     }
     // append null terminator to 2nd arg
     // make it compatible with C code.
-    char[] filename = cast(char[]) (args[1] ~ '\0');
+    char[] filename = cast(char[])(args[1] ~ '\0');
 
     initEditor();
     editorSelectSyntaxHighlight(filename.ptr);
@@ -45,10 +78,11 @@ int main(string[] args) {
     char[] msg = "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find".dup;
     editorSetStatusMessage(msg.ptr);
 
-    while(true) {
+    while (true)
+    {
         editorRefreshScreen();
         editorProcessKeypress(STDIN_FILENO);
     }
-        
+
     return 0;
 }

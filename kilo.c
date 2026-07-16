@@ -529,27 +529,6 @@ int editorSyntaxToColor(int hl) {
     default: return 37;             /* white */
     }
 }
-
-/* Select the syntax highlight scheme depending on the filename,
- * setting it in the global state E.syntax. */
-void editorSelectSyntaxHighlight(char *filename) {
-    for (unsigned int j = 0; j < HLDB_ENTRIES; j++) {
-        struct editorSyntax *s = HLDB+j;
-        unsigned int i = 0;
-        while(s->filematch[i]) {
-            char *p;
-            int patlen = strlen(s->filematch[i]);
-            if ((p = strstr(filename,s->filematch[i])) != NULL) {
-                if (s->filematch[i][0] != '.' || p[patlen] == '\0') {
-                    E.syntax = s;
-                    return;
-                }
-            }
-            i++;
-        }
-    }
-}
-
 /* ======================= Editor rows implementation ======================= */
 
 /* Update the rendered version and the syntax highlight of a row. */
@@ -1266,43 +1245,3 @@ void updateWindowSize(void) {
     }
     E.screenrows -= 2; /* Get room for status bar. */
 }
-/*
-void handleSigWinCh(int unused __attribute__((unused))) {
-    updateWindowSize();
-    if (E.cy > E.screenrows) E.cy = E.screenrows - 1;
-    if (E.cx > E.screencols) E.cx = E.screencols - 1;
-    editorRefreshScreen();
-}*/
-/*
-void initEditor(void) {
-    E.cx = 0;
-    E.cy = 0;
-    E.rowoff = 0;
-    E.coloff = 0;
-    E.numrows = 0;
-    E.row = NULL;
-    E.dirty = 0;
-    E.filename = NULL;
-    E.syntax = NULL;
-    updateWindowSize();
-    signal(SIGWINCH, handleSigWinCh);
-}*
-/*
-int main(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stderr,"Usage: kilo <filename>\n");
-        exit(1);
-    }
-
-    initEditor();
-    editorSelectSyntaxHighlight(argv[1]);
-    editorOpen(argv[1]);
-    enableRawMode(STDIN_FILENO);
-    editorSetStatusMessage(
-        "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
-    while(1) {
-        editorRefreshScreen();
-        editorProcessKeypress(STDIN_FILENO);
-    }
-    return 0;
-}*/
