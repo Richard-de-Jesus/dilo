@@ -354,6 +354,40 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* Insert a row at the specified position, shifting the other rows on the bottom
+ * if required. */
+void editorInsertRow(int at, char* s, size_t len)
+{
+    if (at > kilo.E.numrows)
+        return;
+    kilo.E.row = cast(erow*) realloc(kilo.E.row, erow.sizeof * (kilo.E.numrows + 1));
+    if (at != kilo.E.numrows)
+    {
+        memmove(kilo.E.row + at + 1, kilo.E.row + at, kilo.E.row[0].sizeof * (kilo.E.numrows - at));
+        for (int j = at + 1; j <= kilo.E.numrows; j++)
+            kilo.E.row[j].idx++;
+    }
+    kilo.E.row[at].size = cast(int) len;
+    kilo.E.row[at].chars = cast(char*)malloc(len + 1);
+    memcpy(kilo.E.row[at].chars, s, len + 1);
+    kilo.E.row[at].hl = null;
+    kilo.E.row[at].hl_oc = 0;
+    kilo.E.row[at].render = null;
+    kilo.E.row[at].rsize = 0;
+    kilo.E.row[at].idx = at;
+    editorUpdateRow(kilo.E.row + at);
+    kilo.E.numrows++;
+    kilo.E.dirty++;
+}
+
+/* Free row's heap allocated stuff. */
+void editorFreeRow(erow* row)
+{
+    free(row.render);
+    free(row.chars);
+    free(row.hl);
+}
+
 /* Remove the row at the specified position, shifting the remainign on the
  * top. */
 void editorDelRow(int at)
@@ -367,7 +401,7 @@ void editorDelRow(int at)
     memmove(kilo.E.row + at, kilo.E.row + at + 1, kilo.E.row[0].sizeof * (kilo.E.numrows - at - 1));
     for (int j = at; j < kilo.E.numrows - 1; j++)
         kilo.E.row[j].idx++;
-        
+
     kilo.E.numrows--;
     kilo.E.dirty++;
 }
