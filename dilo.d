@@ -354,6 +354,73 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* Maps syntax highlight token types to terminal colors. */
+int editorSyntaxToColor(int hl)
+{
+    switch (hl)
+    {
+    case HL_COMMENT, HL_MLCOMMENT:
+        return 36; /* cyan */
+    case HL_KEYWORD1:
+        return 33; /* yellow */
+    case HL_KEYWORD2:
+        return 32; /* green */
+    case HL_STRING:
+        return 35; /* magenta */
+    case HL_NUMBER:
+        return 31; /* red */
+    case HL_MATCH:
+        return 34; /* blu */
+    default:
+        return 37; /* white */
+    }
+}
+
+/* ======================= Editor rows implementation ======================= */
+
+/* Update the rendered version and the syntax highlight of a row. */
+void editorUpdateRow(erow* row)
+{
+    uint tabs = 0, nonprint = 0;
+    int j, idx;
+
+    /* Create a version of the row we can directly print on the screen,
+     * respecting tabs, substituting non printable characters with '?'. */
+    free(row.render);
+    for (j = 0; j < row.size; j++)
+        if (row.chars[j] == TAB)
+            tabs++;
+
+    ulong allocsize =
+        cast(ulong) row.size + tabs * 8 + nonprint * 9 + 1;
+    if (allocsize > uint.max)
+    {
+        writeln("Some line of the edited file is too long for kilo");
+        exit(1);
+    }
+
+    row.render = cast(char*) malloc(row.size + tabs * 8 + nonprint * 9 + 1);
+    idx = 0;
+    for (j = 0; j < row.size; j++)
+    {
+        if (row.chars[j] == TAB)
+        {
+            row.render[idx++] = ' ';
+            while ((idx + 1) % 8 != 0)
+                row.render[idx++] = ' ';
+        }
+        else
+        {
+            row.render[idx++] = row.chars[j];
+        }
+    }
+    row.rsize = idx;
+    row.render[idx] = '\0';
+
+    /* Update the syntax highlighting attributes of the row. */
+    editorUpdateSyntax(row);
+}
+
 /* Insert a row at the specified position, shifting the other rows on the bottom
  * if required. */
 void editorInsertRow(int at, char* s, size_t len)
@@ -368,7 +435,7 @@ void editorInsertRow(int at, char* s, size_t len)
             kilo.E.row[j].idx++;
     }
     kilo.E.row[at].size = cast(int) len;
-    kilo.E.row[at].chars = cast(char*)malloc(len + 1);
+    kilo.E.row[at].chars = cast(char*) malloc(len + 1);
     memcpy(kilo.E.row[at].chars, s, len + 1);
     kilo.E.row[at].hl = null;
     kilo.E.row[at].hl_oc = 0;
