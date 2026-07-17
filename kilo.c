@@ -601,37 +601,3 @@ char *editorRowsToString(int *buflen) {
     *p = '\0';
     return buf;
 }
-
-/* Insert a character at the specified position in a row, moving the remaining
- * chars on the right if needed. */
-void editorRowInsertChar(erow *row, int at, int c) {
-    if (at > row->size) {
-        /* Pad the string with spaces if the insert location is outside the
-         * current length by more than a single character. */
-        int padlen = at-row->size;
-        /* In the next line +2 means: new char and null term. */
-        row->chars = realloc(row->chars,row->size+padlen+2);
-        memset(row->chars+row->size,' ',padlen);
-        row->chars[row->size+padlen+1] = '\0';
-        row->size += padlen+1;
-    } else {
-        /* If we are in the middle of the string just make space for 1 new
-         * char plus the (already existing) null term. */
-        row->chars = realloc(row->chars,row->size+2);
-        memmove(row->chars+at+1,row->chars+at,row->size-at+1);
-        row->size++;
-    }
-    row->chars[at] = c;
-    editorUpdateRow(row);
-    E.dirty++;
-}
-
-/* Append the string 's' at the end of a row */
-void editorRowAppendString(erow *row, char *s, size_t len) {
-    row->chars = realloc(row->chars,row->size+len+1);
-    memcpy(row->chars+row->size,s,len);
-    row->size += len;
-    row->chars[row->size] = '\0';
-    editorUpdateRow(row);
-    E.dirty++;
-}
