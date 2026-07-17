@@ -354,6 +354,53 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* Remove the row at the specified position, shifting the remainign on the
+ * top. */
+void editorDelRow(int at)
+{
+    erow* row;
+
+    if (at >= kilo.E.numrows)
+        return;
+    row = kilo.E.row + at;
+    editorFreeRow(row);
+    memmove(kilo.E.row + at, kilo.E.row + at + 1, kilo.E.row[0].sizeof * (kilo.E.numrows - at - 1));
+    for (int j = at; j < kilo.E.numrows - 1; j++)
+        kilo.E.row[j].idx++;
+        
+    kilo.E.numrows--;
+    kilo.E.dirty++;
+}
+
+/* Turn the editor rows into a single heap-allocated string.
+ * Returns the pointer to the heap-allocated string and populate the
+ * integer pointed by 'buflen' with the size of the string, escluding
+ * the final nulterm. */
+char* editorRowsToString(int* buflen)
+{
+    char* buf = null;
+    char* p;
+    int totlen = 0;
+
+    /* Compute count of bytes */
+    foreach (j; 0 .. kilo.E.numrows)
+        totlen += kilo.E.row[j].size + 1; /* +1 is for "\n" at end of every row */
+
+    *buflen = totlen;
+    totlen++; /* Also make space for nulterm */
+
+    p = buf = cast(char*) malloc(totlen);
+    foreach (j; 0 .. kilo.E.numrows)
+    {
+        memcpy(p, kilo.E.row[j].chars, kilo.E.row[j].size);
+        p += kilo.E.row[j].size;
+        *p = '\n';
+        p++;
+    }
+    *p = '\0';
+    return buf;
+}
+
 /* Insert a character at the specified position in a row, moving the remaining
  * chars on the right if needed. */
 void editorRowInsertChar(erow* row, int at, int c)
