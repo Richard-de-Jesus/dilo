@@ -355,6 +355,19 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+/* Here we define an array of syntax highlights by extensions, keywords,
+ * comments delimiters and flags. */
+editorSyntax[1] HLDB = [
+    editorSyntax(
+        /* C / C++ */
+        C_HL_extensions.ptr,
+        C_HL_keywords.ptr,
+        "//","/*","*/",
+        HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS
+    )
+];
+
+enum HLDB_ENTRIES = HLDB.length;
 /* ======================= Low level terminal handling ====================== */
 
 termios orig_termios; /* In order to restore at exit.*/
