@@ -326,17 +326,17 @@ int enableRawMode(int fd)
 
 /* Load the specified program in the editor memory and returns 0 on success
  * or 1 on error. */
-int editorOpen(char* filename)
+int editorOpen(string filename)
 {
     FILE* fp;
-
+    filename ~= '\0'; // alloc new string
     ED.dirty = 0;
     free(ED.filename);
-    size_t fnlen = strlen(filename) + 1;
+    size_t fnlen = strlen(filename.ptr) + 1;
     ED.filename = cast(char*) malloc(fnlen);
-    memcpy(ED.filename, filename, fnlen);
+    memcpy(ED.filename, filename.ptr, fnlen);
 
-    fp = fopen(filename, "r");
+    fp = fopen(filename.ptr, "r");
     if (!fp)
     {
         if (errno != ENOENT)
@@ -364,19 +364,20 @@ int editorOpen(char* filename)
 
 /* Select the syntax highlight scheme depending on the filename,
  * setting it in the global state E.syntax. */
-void editorSelectSyntaxHighlight(const (char)* filename)
+void editorSelectSyntaxHighlight(string filename)
 {
+    // allocs new string
+    filename ~= '\0';
     foreach (size_t j; 0 .. HLDB_ENTRIES)
     {
         editorSyntax* s = &HLDB[j];
-        size_t i = 0;
-        while (s.filematch[i])
+        for (size_t i = 0; s.filematch[i] != null; i++)
         {
             char* p;
             size_t patlen = strlen(s.filematch[i]);
             // cast away the const, okay since strstr only modifies
             // the pointer, not the chars
-            if ((p = strstr(cast(char*) filename, s.filematch[i])) != NULL)
+            if ((p = strstr(cast(char*) filename.ptr, s.filematch[i])) != NULL)
             {
                 if (s.filematch[i][0] != '.' || p[patlen] == '\0')
                 {
@@ -384,7 +385,6 @@ void editorSelectSyntaxHighlight(const (char)* filename)
                     return;
                 }
             }
-            i++;
         }
     }
 }
@@ -1604,13 +1604,10 @@ int main(string[] args)
         // exit is imported from kilo, wich imports stdlib.h
         exit(1);
     }
-    // append null terminator to 2nd arg
-    // make it compatible with C code.
-    char[] filename = cast(char[])(args[1] ~ '\0');
 
     initEditor();
-    editorSelectSyntaxHighlight(filename.ptr);
-    if (editorOpen(filename.ptr) == 1)
+    editorSelectSyntaxHighlight(args[1]);
+    if (editorOpen(args[1]) == 1)
     {
         writeln(dstderr, "file dont exist");
         exit(1);
