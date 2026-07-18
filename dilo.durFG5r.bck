@@ -433,7 +433,7 @@ void initC_HL_extensions() {
     foreach(i; 0..6 - 1) {
 
         extNames[i] ~= '\0';
-        C_HL_extensions[i] = extNames[i].dup.ptr;
+        C_HL_extensions[i] = extNames[i].ptr;
     }
     C_HL_extensions[6 -1 ] = null;
 }
@@ -464,7 +464,7 @@ void initC_HL_keywords() {
     foreach(i; 0..82 - 1) {
 
         keyNames[i] ~= '\0';
-        C_HL_keywords[i] = keyNames[i].dup.ptr;
+        C_HL_keywords[i] = keyNames[i].ptr;
     }
     C_HL_keywords[82 -1 ] = null;
 }
@@ -1512,11 +1512,8 @@ int main(string[] args)
 {
     initGlobals();
 
-    foreach(s; C_HL_extensions) {
-        cio.printf("%s  \n", s);
-    }
-    foreach(s; C_HL_keywords) {
-        cio.printf("%s \n", s);
+    foreach(s; C_Hl_extensions) {
+        printf("%s  \n", s);
     }
     return 0;
     if (args.length != 2)
