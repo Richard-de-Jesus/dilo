@@ -422,7 +422,7 @@ enum int
  * There is no support to highlight patterns currently. */
 
 
-
+// TODO: remove this hack this hack that converts strings to char*
 
 /* C / C++ */
 __gshared char *[6] C_HL_extensions;
@@ -1511,14 +1511,6 @@ void initEditor()
 int main(string[] args)
 {
     initGlobals();
-
-    foreach(s; C_HL_extensions) {
-        cio.printf("%s  \n", s);
-    }
-    foreach(s; C_HL_keywords) {
-        cio.printf("%s \n", s);
-    }
-    return 0;
     if (args.length != 2)
     {
         writeln(dstderr, "Usage: dilo <filename>");
