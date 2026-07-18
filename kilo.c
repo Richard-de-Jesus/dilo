@@ -31,20 +31,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define KILO_VERSION "0.0.1"
-
 #ifdef __linux__
 #define _POSIX_C_SOURCE 200809L
 #endif
 
 #include <termios.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <errno.h>
 #include <string.h>
-#include <ctype.h>
 #include <time.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -53,28 +47,3 @@
 #include <stdarg.h>
 #include <fcntl.h>
 #include <signal.h>
-
-struct editorSyntax {
-    char **filematch;
-    char **keywords;
-    char singleline_comment_start[2];
-    char multiline_comment_start[3];
-    char multiline_comment_end[3];
-    int flags;
-};
-
-/* This structure represents a single line of the file we are editing. */
-typedef struct erow {
-    int idx;            /* Row index in the file, zero-based. */
-    int size;           /* Size of the row, excluding the null term. */
-    int rsize;          /* Size of the rendered row. */
-    char *chars;        /* Row content. */
-    char *render;       /* Row content "rendered" for screen (for TABs). */
-    unsigned char *hl;  /* Syntax highlight type for each character in render.*/
-    int hl_oc;          /* Row had open comment at end in last syntax highlight
-                           check. */
-} erow;
-
-typedef struct hlcolor {
-    int r,g,b;
-} hlcolor;

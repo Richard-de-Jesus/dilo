@@ -4,11 +4,35 @@ import std.stdio : writeln;
 import std.format : sformat;
 import std;
 
+import core.stdc.stdio : perror, snprintf, sscanf, FILE, fopen;
+
+alias cposix = core.sys.posix;
+
+// only stdio.h function not found in core.stdc
+extern (C) cbuiltin.ssize_t getline(char** lineptr, size_t* n,
+    FILE* stream);
+
+// re-implementing some ctype.h functions, since they are small.
+// code copied form jart/cosmopolitan/libc
+
+int isspace(int c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' ||
+         c == '\v';
+}
+
+int isprint(int c) {
+  return 0x20 <= c && c <= 0x7E;
+}
+
+int isdigit(int c) {
+  return '0' <= c && c <= '9';
+}
+
 alias dstderr = std.stdio.stderr;
 // resolve conflicts between libc and core.stdc.
 // we prefer D's version, more type safety.
 alias libc = core.stdc;
-alias cio = libc.stdio;
+
 /* making clear that kilo namespace is used
  to resolve conflicts between symbols built in C
   and D's reimport of those symbols in core.* */
@@ -20,10 +44,9 @@ enum KILO_QUIT_TIMES = 3;
 
 /*When the file is modified, requires Ctrl-q to be
 * pressed N times before actually quitting. */
-int quit_times = KILO_QUIT_TIMES;
 void editorProcessKeypress(int fd)
 {
-
+    static quit_times = KILO_QUIT_TIMES;
     int c = editorReadKey(fd);
     switch (c)
     {
@@ -106,8 +129,8 @@ extern (C) void editorRefreshScreen()
             if (ED.numrows == 0 && y == ED.screenrows / 3)
             {
                 char[80] welcome = void;
-                int welcomelen = cio.snprintf(welcome.ptr, welcome.length,
-                    "Kilo editor -- verison %s\x1b[0K\r\n", KILO_VERSION.ptr);
+                int welcomelen = snprintf(welcome.ptr, welcome.length,
+                    "Dilo editor -- verison %s\x1b[0K\r\n", DILO_VERSION.ptr);
                 int padding = (ED.screencols - welcomelen) / 2;
                 if (padding)
                 {
@@ -164,7 +187,7 @@ extern (C) void editorRefreshScreen()
                     if (color != current_color)
                     {
                         char[16] _buf = void;
-                        int clen = cio.snprintf(_buf.ptr, _buf.length, "\x1b[%dm", color);
+                        int clen = snprintf(_buf.ptr, _buf.length, "\x1b[%dm", color);
                         current_color = color;
                         abAppend(&ab, _buf.ptr, clen);
                     }
@@ -182,9 +205,9 @@ extern (C) void editorRefreshScreen()
     abAppend(&ab, "\x1b[7m", 4);
     char[80] status = void;
     char[80] rstatus = void;
-    int len = cio.snprintf(status.ptr, status.length, "%.20s - %d lines %s",
+    int len = snprintf(status.ptr, status.length, "%.20s - %d lines %s",
         ED.filename, ED.numrows, ED.dirty ? "(modified)".ptr : "".ptr);
-    int rlen = cio.snprintf(rstatus.ptr, rstatus.length,
+    int rlen = snprintf(rstatus.ptr, rstatus.length,
         "%d/%d", ED.rowoff + ED.cy + 1, ED.numrows);
     if (len > ED.screencols)
         len = ED.screencols;
@@ -208,8 +231,7 @@ extern (C) void editorRefreshScreen()
     abAppend(&ab, "\x1b[0K", 4);
     size_t msglen = strlen(ED.statusmsg.ptr);
     if (msglen && time(null) - ED.statusmsg_time < 5)
-        abAppend(&ab, ED.statusmsg.ptr, msglen <= ED.screencols ? cast(int) msglen
-                : ED.screencols);
+        abAppend(&ab, ED.statusmsg.ptr, msglen <= ED.screencols ? cast(int) msglen : ED.screencols);
 
     /* Put cursor at its current position. Note that the horizontal position
      * at which the cursor is displayed may be different compared to 'E.cx'
@@ -227,7 +249,7 @@ extern (C) void editorRefreshScreen()
             cx++;
         }
     }
-    cio.snprintf(buf.ptr, buf.length, "\x1b[%d;%dH", ED.cy + 1, cx);
+    snprintf(buf.ptr, buf.length, "\x1b[%d;%dH", ED.cy + 1, cx);
     abAppend(&ab, buf.ptr, cast(int) strlen(buf.ptr));
     abAppend(&ab, "\x1b[?25h", 6); /* Show cursor. */
     cbuiltin.write(STDOUT_FILENO, ab.b, ab.len);
@@ -295,7 +317,7 @@ int enableRawMode(int fd)
  * or 1 on error. */
 int editorOpen(char* filename)
 {
-    cio.FILE* fp;
+    FILE* fp;
 
     ED.dirty = 0;
     free(ED.filename);
@@ -303,12 +325,12 @@ int editorOpen(char* filename)
     ED.filename = cast(char*) malloc(fnlen);
     memcpy(ED.filename, filename, fnlen);
 
-    fp = cio.fopen(filename, "r");
+    fp = fopen(filename, "r");
     if (!fp)
     {
         if (errno != ENOENT)
         {
-            cio.perror("Opening file");
+            perror("Opening file");
             exit(1);
         }
         return 1;
@@ -317,8 +339,7 @@ int editorOpen(char* filename)
     char* line = null;
     size_t linecap = 0;
     cbuiltin.ssize_t linelen;
-    // cast away the shared in fp.
-    while ((linelen = getline(&line, &linecap, cast(cbuiltin._IO_FILE*) fp)) != -1)
+    while ((linelen = getline(&line, &linecap, fp)) != -1)
     {
         if (linelen && (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
             line[--linelen] = '\0';
@@ -355,36 +376,66 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
+enum DILO_VERSION = "0.0.1";
+
 /* Syntax highlight types */
 enum HL_NORMAL = 0;
 enum HL_NONPRINT = 1;
-enum HL_COMMENT = 2;   /* Single line comment. */
+enum HL_COMMENT = 2; /* Single line comment. */
 enum HL_MLCOMMENT = 3; /* Multi-line comment. */
 enum HL_KEYWORD1 = 4;
 enum HL_KEYWORD2 = 5;
 enum HL_STRING = 6;
 enum HL_NUMBER = 7;
-enum HL_MATCH = 8;      /* Search match. */
+enum HL_MATCH = 8; /* Search match. */
 
-enum HL_HIGHLIGHT_STRINGS = 1<<0;
-enum HL_HIGHLIGHT_NUMBERS = 1<<1;
+enum HL_HIGHLIGHT_STRINGS = 1 << 0;
+enum HL_HIGHLIGHT_NUMBERS = 1 << 1;
 
+struct editorSyntax
+{
+    char** filematch;
+    char** keywords;
+    char[2] singleline_comment_start;
+    char[3] multiline_comment_start;
+    char[3] multiline_comment_end;
+    int flags;
+}
 
-struct editorConfig {
-    int cx,cy;  /* Cursor x and y position in characters */
-    int rowoff;     /* Offset of row displayed. */
-    int coloff;     /* Offset of column displayed. */
+/* This structure represents a single line of the file we are editing. */
+struct erow
+{
+    int idx; /* Row index in the file, zero-based. */
+    int size; /* Size of the row, excluding the null term. */
+    int rsize; /* Size of the rendered row. */
+    char* chars; /* Row content. */
+    char* render; /* Row content "rendered" for screen (for TABs). */
+    ubyte* hl; /* Syntax highlight type for each character in render.*/
+    int hl_oc; /* Row had open comment at end in last syntax highlight
+                           check. */
+}
+
+struct hlcolor
+{
+    int r, g, b;
+}
+
+struct editorConfig
+{
+    int cx, cy; /* Cursor x and y position in characters */
+    int rowoff; /* Offset of row displayed. */
+    int coloff; /* Offset of column displayed. */
     int screenrows; /* Number of rows that we can show */
     int screencols; /* Number of cols that we can show */
-    int numrows;    /* Number of rows */
-    int rawmode;    /* Is terminal raw mode enabled? */
-    erow* row;      /* Rows */
-    int dirty;      /* File modified but not saved. */
+    int numrows; /* Number of rows */
+    int rawmode; /* Is terminal raw mode enabled? */
+    erow* row; /* Rows */
+    int dirty; /* File modified but not saved. */
     char* filename; /* Currently open filename */
     char[80] statusmsg;
     cbuiltin.time_t statusmsg_time;
-    editorSyntax* syntax;    /* Current syntax highlight, or NULL. */
-};
+    editorSyntax* syntax; /* Current syntax highlight, or NULL. */
+}
 
 private editorConfig ED;
 
@@ -393,31 +444,30 @@ private editorConfig ED;
 // wich is why it is so hard to translate
 
 // enum KEY_ACTION {...} 
-enum int
-        KEY_NULL = 0,       /* NULL */
-        CTRL_C = 3,         /* Ctrl-c */
-        CTRL_D = 4,         /* Ctrl-d */
-        CTRL_F = 6,         /* Ctrl-f */
-        CTRL_H = 8,         /* Ctrl-h */
-        TAB = 9,            /* Tab */
-        CTRL_L = 12,        /* Ctrl+l */
-        ENTER = 13,         /* Enter */
-        CTRL_Q = 17,        /* Ctrl-q */
-        CTRL_S = 19,        /* Ctrl-s */
-        CTRL_U = 21,        /* Ctrl-u */
-        ESC = 27,           /* Escape */
-        BACKSPACE =  127,   /* Backspace */
-        /* The following are just soft codes, not really reported by the
+enum int KEY_NULL = 0, /* NULL */
+    CTRL_C = 3, /* Ctrl-c */
+    CTRL_D = 4, /* Ctrl-d */
+    CTRL_F = 6, /* Ctrl-f */
+    CTRL_H = 8, /* Ctrl-h */
+    TAB = 9, /* Tab */
+    CTRL_L = 12, /* Ctrl+l */
+    ENTER = 13, /* Enter */
+    CTRL_Q = 17, /* Ctrl-q */
+    CTRL_S = 19, /* Ctrl-s */
+    CTRL_U = 21, /* Ctrl-u */
+    ESC = 27, /* Escape */
+    BACKSPACE = 127, /* Backspace */
+    /* The following are just soft codes, not really reported by the
          * terminal directly. */
-        ARROW_LEFT = 1000,
-        ARROW_RIGHT = 1001,
-        ARROW_UP = 1002,
-        ARROW_DOWN = 1003,
-        DEL_KEY = 1004,
-        HOME_KEY = 1005,
-        END_KEY = 1006,
-        PAGE_UP = 1007,
-        PAGE_DOWN = 1008;
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT = 1001,
+    ARROW_UP = 1002,
+    ARROW_DOWN = 1003,
+    DEL_KEY = 1004,
+    HOME_KEY = 1005,
+    END_KEY = 1006,
+    PAGE_UP = 1007,
+    PAGE_DOWN = 1008;
 
 /* =========================== Syntax highlights DB =========================
  *
@@ -440,55 +490,57 @@ enum int
  *
  * There is no support to highlight patterns currently. */
 
-
 // TODO: remove this hack this hack that converts strings to char*
 
 /* C / C++ */
-__gshared char *[6] C_HL_extensions;
-__gshared string[6] extNames = [".c",".h",".cpp",".hpp",".cc",null];
+__gshared char*[6] C_HL_extensions;
+__gshared string[6] extNames = [".c", ".h", ".cpp", ".hpp", ".cc", null];
 
-
-void initC_HL_extensions() {
-    foreach(i; 0..6 - 1) {
+void initC_HL_extensions()
+{
+    foreach (i; 0 .. 6 - 1)
+    {
 
         extNames[i] ~= '\0';
         C_HL_extensions[i] = extNames[i].dup.ptr;
     }
-    C_HL_extensions[6 -1 ] = null;
+    C_HL_extensions[6 - 1] = null;
 }
 
-__gshared char *[82] C_HL_keywords;
+__gshared char*[82] C_HL_keywords;
 __gshared string[82] keyNames = [
-	/* C Keywords */
-	"auto","break","case","continue","default","do","else","enum",
-	"extern","for","goto","if","register","return","sizeof","static",
-	"struct","switch","typedef","union","volatile","while","NULL",
+    /* C Keywords */
+    "auto", "break", "case", "continue", "default", "do", "else", "enum",
+    "extern", "for", "goto", "if", "register", "return", "sizeof", "static",
+    "struct", "switch", "typedef", "union", "volatile", "while", "NULL",
 
-	/* C++ Keywords */
-	"alignas","alignof","and","and_eq","asm","bitand","bitor","class",
-	"compl","constexpr","const_cast","deltype","delete","dynamic_cast",
-	"explicit","export","false","friend","inline","mutable","namespace",
-	"new","noexcept","not","not_eq","nullptr","operator","or","or_eq",
-	"private","protected","public","reinterpret_cast","static_assert",
-	"static_cast","template","this","thread_local","throw","true","try",
-	"typeid","typename","virtual","xor","xor_eq",
+    /* C++ Keywords */
+    "alignas", "alignof", "and", "and_eq", "asm", "bitand", "bitor", "class",
+    "compl", "constexpr", "const_cast", "deltype", "delete", "dynamic_cast",
+    "explicit", "export", "false", "friend", "inline", "mutable", "namespace",
+    "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq",
+    "private", "protected", "public", "reinterpret_cast", "static_assert",
+    "static_cast", "template", "this", "thread_local", "throw", "true", "try",
+    "typeid", "typename", "virtual", "xor", "xor_eq",
 
-	/* C types */
-        "int|","long|","double|","float|","char|","unsigned|","signed|",
-        "void|","short|","auto|","const|","bool|", null
+    /* C types */
+    "int|", "long|", "double|", "float|", "char|", "unsigned|", "signed|",
+    "void|", "short|", "auto|", "const|", "bool|", null
 ];
 
-
-void initC_HL_keywords() {
-    foreach(i; 0..82 - 1) {
+void initC_HL_keywords()
+{
+    foreach (i; 0 .. 82 - 1)
+    {
 
         keyNames[i] ~= '\0';
         C_HL_keywords[i] = keyNames[i].dup.ptr;
     }
-    C_HL_keywords[82 -1 ] = null;
+    C_HL_keywords[82 - 1] = null;
 }
 
-void initGlobals() {
+void initGlobals()
+{
     initC_HL_extensions();
     initC_HL_keywords();
 }
@@ -644,7 +696,7 @@ int getCursorPosition(int ifd, int ofd, int* rows, int* cols)
     if (buf[0] != ESC || buf[1] != '[')
         return -1;
     // TODO: remove pointer arithemetic
-    if (cio.sscanf(buf.ptr + 2, "%d;%d", rows, cols) != 2)
+    if (sscanf(buf.ptr + 2, "%d;%d", rows, cols) != 2)
         return -1;
     return 0;
 }
@@ -1472,7 +1524,7 @@ int getWindowSize(int ifd, int ofd, int* rows, int* cols)
 
         /* Restore position. */
         char[32] seq = void;
-        cio.snprintf(seq.ptr, 32, "\x1b[%d;%dH", orig_row, orig_col);
+        snprintf(seq.ptr, 32, "\x1b[%d;%dH", orig_row, orig_col);
         if (kilo.write(ofd, seq.ptr, strlen(seq.ptr)) == -1)
         {
             /* Can't recover... */
@@ -1494,7 +1546,7 @@ void updateWindowSize()
     if (getWindowSize(STDIN_FILENO, STDOUT_FILENO,
             &ED.screenrows, &ED.screencols) == -1)
     {
-        cio.perror("Unable to query the screen for size (columns / rows)");
+        perror("Unable to query the screen for size (columns / rows)");
         exit(1);
     }
     ED.screenrows -= 2; /* Get room for status bar. */
