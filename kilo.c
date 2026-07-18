@@ -36,10 +36,8 @@
 #endif
 
 #include <termios.h>
-#include <sys/types.h>
+// will not translate to D, interfaces with the kernel.
 #include <sys/ioctl.h>
-#include <sys/time.h>
+// will not translate to D, most functions not in core.sys.linux.unistd
 #include <unistd.h>
-#include <stdarg.h>
 #include <fcntl.h>
-#include <signal.h>

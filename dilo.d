@@ -6,13 +6,19 @@ import std;
 
 alias libc = core.stdc;
 
-import core.stdc.stdio : perror, snprintf, sscanf, FILE, fopen;
-import core.stdc.stdlib : malloc, free, realloc, exit, atexit;
-import core.stdc.errno : errno, ENOTTY, ENOENT;
-import core.stdc.time : time;
-import core.stdc.string : memcpy, memmove, memset, strlen, strerror, strstr, strchr, memcmp;
+string LC(string name)() {
+    return "import core.stdc." ~ name;
+}
 
-alias cposix = core.sys.posix;
+mixin(LC!"stdio : perror, snprintf, sscanf, FILE, fopen;");
+mixin(LC!"stdlib : malloc, free, realloc, exit, atexit;");
+mixin(LC!"errno : errno, ENOTTY, ENOENT;");
+mixin(LC!"time : time;");
+mixin(LC!"string : memcpy, memmove, memset, strlen, strerror, strstr, strchr, memcmp;");
+mixin(LC!"signal : signal;");
+mixin(LC!"config : c_long, c_ulong;");
+
+enum SIGWINCH = 28;
 
 // only stdio.h function not found in core.stdc
 extern (C) cbuiltin.ssize_t getline(char** lineptr, size_t* n,
@@ -1262,7 +1268,7 @@ void abAppend(abuf* ab, const char* s, int len)
 {
     char* _new = cast(char*) realloc(ab.b, ab.len + len);
 
-    if (_new == NULL)
+    if (_new == null)
         return;
     memcpy(_new + ab.len, s, len);
     ab.b = _new;
@@ -1560,7 +1566,7 @@ void updateWindowSize()
 }
 // extern(C) because it is called by signal in <signal.h>
 extern (C)
-void handleSigWinCh(int unused)
+void handleSigWinCh(int unused) 
 {
 
     updateWindowSize();
@@ -1583,7 +1589,10 @@ void initEditor()
     ED.filename = null;
     ED.syntax = null;
     updateWindowSize();
-    signal(SIGWINCH, &handleSigWinCh);
+    // weird hack to add nothrow and @nogc to the function.
+    // doing otherwise would be a lot of work. TODO:
+    alias SIGFN = extern(C) void function(int) nothrow @nogc; 
+    signal(SIGWINCH, cast(SIGFN)&handleSigWinCh);
 }
 
 int main(string[] args)
