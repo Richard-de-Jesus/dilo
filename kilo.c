@@ -36,10 +36,6 @@
 #endif
 
 #include <termios.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <time.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>

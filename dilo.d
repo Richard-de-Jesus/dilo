@@ -4,7 +4,13 @@ import std.stdio : writeln;
 import std.format : sformat;
 import std;
 
+alias libc = core.stdc;
+
 import core.stdc.stdio : perror, snprintf, sscanf, FILE, fopen;
+import core.stdc.stdlib : malloc, free, realloc, exit, atexit;
+import core.stdc.errno : errno, ENOTTY, ENOENT;
+import core.stdc.time : time;
+import core.stdc.string : memcpy, memmove, memset, strlen, strerror, strstr, strchr, memcmp;
 
 alias cposix = core.sys.posix;
 
@@ -15,24 +21,23 @@ extern (C) cbuiltin.ssize_t getline(char** lineptr, size_t* n,
 // re-implementing some ctype.h functions, since they are small.
 // code copied form jart/cosmopolitan/libc
 
-int isspace(int c) {
-  return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' ||
-         c == '\v';
+int isspace(int c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' ||
+        c == '\v';
 }
 
-int isprint(int c) {
-  return 0x20 <= c && c <= 0x7E;
+int isprint(int c)
+{
+    return 0x20 <= c && c <= 0x7E;
 }
 
-int isdigit(int c) {
-  return '0' <= c && c <= '9';
+int isdigit(int c)
+{
+    return '0' <= c && c <= '9';
 }
 
 alias dstderr = std.stdio.stderr;
-// resolve conflicts between libc and core.stdc.
-// we prefer D's version, more type safety.
-alias libc = core.stdc;
-
 /* making clear that kilo namespace is used
  to resolve conflicts between symbols built in C
   and D's reimport of those symbols in core.* */
@@ -353,7 +358,7 @@ int editorOpen(char* filename)
 
 /* Select the syntax highlight scheme depending on the filename,
  * setting it in the global state E.syntax. */
-void editorSelectSyntaxHighlight(const char* filename)
+void editorSelectSyntaxHighlight(const (char)* filename)
 {
     foreach (size_t j; 0 .. HLDB_ENTRIES)
     {
@@ -363,7 +368,9 @@ void editorSelectSyntaxHighlight(const char* filename)
         {
             char* p;
             size_t patlen = strlen(s.filematch[i]);
-            if ((p = strstr(filename, s.filematch[i])) != NULL)
+            // cast away the const, okay since strstr only modifies
+            // the pointer, not the chars
+            if ((p = strstr(cast(char*) filename, s.filematch[i])) != NULL)
             {
                 if (s.filematch[i][0] != '.' || p[patlen] == '\0')
                 {
