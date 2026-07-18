@@ -4,6 +4,7 @@ import std.stdio : writeln;
 import std.format : sformat;
 import std;
 
+alias dstderr = std.stdio.stderr;
 // resolve conflicts between libc and core.stdc.
 // we prefer D's version, more type safety.
 alias libc = core.stdc;
@@ -352,6 +353,149 @@ void editorSelectSyntaxHighlight(const char* filename)
             i++;
         }
     }
+}
+
+/* ======================= Low level terminal handling ====================== */
+
+termios orig_termios; /* In order to restore at exit.*/
+
+void disableRawMode(int fd)
+{
+    /* Don't even check the return value as it's too late. */
+    if (kilo.E.rawmode)
+    {
+        tcsetattr(fd, TCSAFLUSH, &orig_termios);
+        kilo.E.rawmode = 0;
+    }
+}
+
+/* Called at exit to avoid remaining in raw mode. */
+//extern because it is passed to libc function atexit
+extern(C) void editorAtExit()
+{
+    disableRawMode(STDIN_FILENO);
+}
+
+/* Read a key from the terminal put in raw mode, trying to handle
+ * escape sequences. */
+int editorReadKey(int fd)
+{
+    long nread;
+    char c;
+    char[3] seq;
+    while ((nread = read(fd, &c, 1)) == 0)
+        if (nread == -1)
+            exit(1);
+    while (true)
+    {
+        switch (c)
+        {
+        case ESC: /* escape sequence */
+            /* If this is just an ESC, we'll timeout here. */
+            if (cbuiltin.read(fd, seq.ptr, 1) == 0)
+                return ESC;
+            // TODO: remove pointer arithemetic
+            if (cbuiltin.read(fd, seq.ptr + 1, 1) == 0)
+                return ESC;
+            /* ESC [ sequences. */
+            if (seq[0] == '[')
+            {
+                if (seq[1] >= '0' && seq[1] <= '9')
+                {
+                    /* Extended escape, read additional byte. */
+                    // TODO: removee pointer arithemetic
+                    if (read(fd, seq.ptr + 2, 1) == 0)
+                        return ESC;
+                    if (seq[2] == '~')
+                    {
+                        switch (seq[1])
+                        {
+                        case '3':
+                            return DEL_KEY;
+                        case '5':
+                            return PAGE_UP;
+                        case '6':
+                            return PAGE_DOWN;
+                        default:
+                            writeln(dstderr, "unreacheable default case in", __LINE__);
+                            exit(1);
+                        }
+                    }
+                }
+                else
+                {
+                    switch (seq[1])
+                    {
+                    case 'A':
+                        return ARROW_UP;
+                    case 'B':
+                        return ARROW_DOWN;
+                    case 'C':
+                        return ARROW_RIGHT;
+                    case 'D':
+                        return ARROW_LEFT;
+                    case 'H':
+                        return HOME_KEY;
+                    case 'F':
+                        return END_KEY;
+                    default:
+                        writeln(dstderr, "unreacheable default case in", __LINE__);
+                        exit(1);
+                    }
+                }
+            }
+            /* ESC O sequences. */
+            else if (seq[0] == 'O')
+            {
+                switch (seq[1])
+                {
+                case 'H':
+                    return HOME_KEY;
+                case 'F':
+                    return END_KEY;
+                default:
+                    writeln(dstderr, "unreacheable default case in", __LINE__);
+                    assert(0);
+                }
+            }
+            break;
+        default:
+            return c;
+        }
+    }
+}
+
+/* Use the ESC [6n escape sequence to query the horizontal cursor position
+ * and return it. On error -1 is returned, on success the position of the
+ * cursor is stored at *rows and *cols and 0 is returned. */
+int getCursorPosition(int ifd, int ofd, int* rows, int* cols)
+{
+    char[32] buf = void;
+    uint i;
+
+    /* Report cursor location */
+    if (cbuiltin.write(ofd, "\x1b[6n".ptr, 4) != 4)
+        return -1;
+
+    /* Read the response: ESC [ rows ; cols R */
+    while (i < buf.length - 1)
+    {
+        // TODO: remove pointer arithemetic
+        if (read(ifd, buf.ptr + i, 1) != 1)
+            break;
+        if (buf[i] == 'R')
+            break;
+        i++;
+    }
+    buf[i] = '\0';
+
+    /* Parse it. */
+    if (buf[0] != ESC || buf[1] != '[')
+        return -1;
+    // TODO: remove pointer arithemetic
+    if (cio.sscanf(buf.ptr + 2, "%d;%d", rows, cols) != 2)
+        return -1;
+    return 0;
 }
 
 /* ====================== Syntax highlight color scheme  ==================== */
@@ -1236,7 +1380,7 @@ int main(string[] args)
 {
     if (args.length != 2)
     {
-        writeln(std.stdio.stderr, "Usage: dilo <filename>");
+        writeln(dstderr, "Usage: dilo <filename>");
         // exit is imported from kilo, wich imports stdlib.h
         exit(1);
     }
@@ -1248,7 +1392,7 @@ int main(string[] args)
     editorSelectSyntaxHighlight(filename.ptr);
     if (editorOpen(filename.ptr) == 1)
     {
-        writeln(std.stdio.stderr, "file dont exist");
+        writeln(dstderr, "file dont exist");
         exit(1);
     }
     enableRawMode(STDIN_FILENO);
