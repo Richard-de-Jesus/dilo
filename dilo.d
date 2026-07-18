@@ -355,14 +355,29 @@ void editorSelectSyntaxHighlight(const char* filename)
     }
 }
 
-/* Here we define an array of syntax highlights by extensions, keywords,
- * comments delimiters and flags. */
+/* Syntax highlight types */
+enum HL_NORMAL = 0;
+enum HL_NONPRINT = 1;
+enum HL_COMMENT = 2;   /* Single line comment. */
+enum HL_MLCOMMENT = 3; /* Multi-line comment. */
+enum HL_KEYWORD1 = 4;
+enum HL_KEYWORD2 = 5;
+enum HL_STRING = 6;
+enum HL_NUMBER = 7;
+enum HL_MATCH = 8;      /* Search match. */
+
+enum HL_HIGHLIGHT_STRINGS = 1<<0;
+enum HL_HIGHLIGHT_NUMBERS = 1<<1;
+
+
+/*Here we define an array of syntax highlights by extensions, keywords,
+ *comments delimiters and flags. */
 editorSyntax[1] HLDB = [
     editorSyntax(
         /* C / C++ */
         C_HL_extensions.ptr,
         C_HL_keywords.ptr,
-        "//","/*","*/",
+        "//", "/*", "*/",
         HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS
     )
 ];
@@ -384,7 +399,7 @@ void disableRawMode(int fd)
 
 /* Called at exit to avoid remaining in raw mode. */
 //extern because it is passed to libc function atexit
-extern(C) void editorAtExit()
+extern (C) void editorAtExit()
 {
     disableRawMode(STDIN_FILENO);
 }
